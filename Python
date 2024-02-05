@@ -1,0 +1,355 @@
+#Incubator
+
+# ==================================================
+# INITIAL CONFIGURATION
+# ==================================================
+
+import tkinter as tk
+import time
+import random
+import math
+import psutil
+import matplotlib.pyplot as plt
+import matplotlib.backends.backend_tkagg as tkagg
+from matplotlib.figure import Figure
+from matplotlib.animation import FuncAnimation
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import threading
+import sys
+import os
+import math
+
+pid = os.getpid()
+current_process = psutil.Process(pid) # ID GPU
+
+window_closed = False
+
+canvas_width_ratio = 1.0
+canvas_height_ratio = 1.0
+
+time_data = []
+cpu_data = []
+memory_data = []
+clouds = [] 
+
+fig = Figure(figsize=(6, 4), dpi=100)
+
+num_cloud_types = 100
+min_speed = 1
+max_speed = 10
+min_angle = 0
+max_angle = 180
+min_electronegativity = 0.7
+max_electronegativity = 4.0
+polar_covalent_threshold = 0.4
+ionic_threshold = 1.7
+bond_chance = 0.25 
+
+cloud_quantity_entry = None
+create_clouds_button = None
+
+# ===================================================
+# Definition of fonction
+# ===================================================
+
+def create_random_color():
+    red = random.randint(0, 255)
+    green = random.randint(0, 255)
+    blue = random.randint(0, 255)
+
+    color = f'#{red:02X}{green:02X}{blue:02X}'
+    
+    return color
+
+def calculate_probability(type_number, min_type, max_type):
+    return 1.0 - (type_number - min_type) / (max_type - min_type)
+
+def calculate_electronegativity(x, y, min_electronegativity, max_electronegativity):
+    x_ratio = x / right_frame.winfo_width()
+    y_ratio = y / right_frame.winfo_height()
+    electronegativity = min_electronegativity + (max_electronegativity - min_electronegativity) * (x_ratio + y_ratio) / 2
+    return electronegativity
+
+def create_and_move_cloud():
+    cloud, dx, dy = create_cloud(canvas, right_frame)
+    if cloud is not None:
+        move_cloud(canvas, cloud, dx, dy, right_frame)
+
+def create_cloud(canvas, right_frame):
+    canvas.update_idletasks()
+
+    x1, y1 = 0, 0
+    x2 = right_frame.winfo_width()
+    y2 = right_frame.winfo_height()
+    
+    x = random.uniform(x1, x2)
+    y = random.uniform(y1, y2)
+    electronegativity = calculate_electronegativity(x, y, min_electronegativity, max_electronegativity)
+
+    min_type = 1
+    max_type = 100
+    type_probability = calculate_probability(random.randint(min_type, max_type), min_type, max_type)
+
+    cloud_color = create_random_color()
+    speed = random.uniform(min_speed, max_speed)
+    angle = random.uniform(min_angle, max_angle)
+    x = random.uniform(x1, x2)
+    y = random.uniform(y1, y2)
+    dx = speed * math.cos(math.radians(angle))
+    dy = speed * math.sin(math.radians(angle))
+
+    cloud_quantity_str = cloud_quantity_entry.get()
+   
+    if cloud_quantity_str:
+        cloud_quantity = int(cloud_quantity_str)
+    else:
+        cloud_quantity = 0
+
+    x = random.uniform(x1, x2)
+    y = random.uniform(y1, y2)
+    
+    cloud = canvas.create_oval(x, y, x + 20, y + 20, fill=cloud_color)
+    return cloud, dx, dy
+
+def create_clouds():
+    cloud_quantity = int(cloud_quantity_entry.get())
+    for _ in range(cloud_quantity):
+        create_and_move_cloud()
+
+def check_collisions(cloud, other_clouds):
+    x1, y1, x2, y2 = canvas.coords(cloud)
+    
+    for other_cloud in other_clouds:
+        if other_cloud != cloud:
+            x1_other, y1_other, x2_other, y2_other = canvas.coords(other_cloud)
+            
+            if (x1 < x2_other and x2 > x1_other and y1 < y2_other and y2 > y1_other):
+                return other_cloud
+    
+    return None
+
+def handle_collision(cloud1, cloud2):
+    x1, y1, x2, y2 = canvas.coords(cloud1)
+    x3, y3, x4, y4 = canvas.coords(cloud2)
+    electronegativity1 = calculate_electronegativity(x1, y1, min_electronegativity, max_electronegativity)
+    electronegativity2 = calculate_electronegativity(x3, y3, min_electronegativity, max_electronegativity)
+
+    electronegativity_difference = abs(electronegativity1 - electronegativity2)
+
+    if electronegativity <= polar_covalent_threshold:
+        bond_chance = 0.8
+    elif electronegativity <= ionic_threshold:
+        bond_chance = 0.5
+    else:
+        bond_chance = 0.2
+
+    if random.random() <= bond_chance:
+        has_bond = True
+    else:
+        has_bond = False
+
+    angle1 = get_cloud_angle(cloud1)
+    speed1 = get_cloud_speed(cloud1)
+    
+    angle2 = get_cloud_angle(cloud2)
+    speed2 = get_cloud_speed(cloud2)
+
+    new_angle1, new_speed1, new_angle2, new_speed2 = calculate_new_velocities_angles(angle1, speed1, angle2, speed2)
+
+    set_cloud_angle(cloud1, new_angle1)
+    set_cloud_speed(cloud1, new_speed1)
+    set_cloud_angle(cloud2, new_angle2)
+    set_cloud_speed(cloud2, new_speed2)
+
+def calculate_new_velocities_angles(angle1, speed1, angle2, speed2):
+    angle1_rad = math.radians(angle1)
+    angle2_rad = math.radians(angle2)
+    
+    new_speed1 = (speed1 * math.cos(angle1_rad - angle2_rad) * (1 - 0.25)) + (speed2 * math.cos(angle2_rad) * 0.25)
+    new_speed2 = (speed2 * math.cos(angle2_rad - angle1_rad) * (1 - 0.25)) + (speed1 * math.cos(angle1_rad) * 0.25)
+    
+    new_angle1_rad = math.atan2(speed1 * math.sin(angle1_rad), new_speed1)
+    new_angle2_rad = math.atan2(speed2 * math.sin(angle2_rad), new_speed2)
+    
+    new_angle1 = math.degrees(new_angle1_rad)
+    new_angle2 = math.degrees(new_angle2_rad)
+    
+    return new_angle1, new_speed1, new_angle2, new_speed2
+
+def move_cloud(canvas, cloud, dx, dy, right_frame):
+    global window_closed
+    if window_closed:
+        return
+    
+    collision_cloud = check_collisions(cloud, clouds)
+    
+    if collision_cloud:
+        if random.random() <= 0.25:
+            electronegativity_cloud1 = calculate_electronegativity(*canvas.coords(cloud), min_electronegativity, max_electronegativity)
+            electronegativity_cloud2 = calculate_electronegativity(*canvas.coords(collision_cloud), min_electronegativity, max_electronegativity)
+            
+            electronegativity_difference = abs(electronegativity_cloud1 - electronegativity_cloud2)
+            
+            if electronegativity_difference <= 0.4:
+                pass
+            elif 0.4 < electronegativity_difference <= 1.7:
+                pass
+            else:
+                pass
+                
+            canvas.delete(cloud)
+            canvas.delete(collision_cloud)
+            
+        else:
+            move_cloud(canvas, cloud, dx, dy, right_frame)
+    
+    else:
+        if not window_closed:
+            try:
+                canvas.move(cloud, dx, dy)
+                x1, y1, x2, y2 = canvas.coords(cloud)
+                canvas_width = right_frame.winfo_width()
+                canvas_height = right_frame.winfo_height()
+            except tk.TclError:
+                print("Le widget a été supprimé, arrêt de move_cloud")
+
+            if x2 > canvas_width: #reappears symmetrically
+                canvas.coords(cloud, 1, y1, 21, y2)
+            elif x1 < 0:
+                canvas.coords(cloud, canvas_width - 20, y1, canvas_width, y2)
+            if y2 > canvas_height:
+                canvas.coords(cloud, x1, 1, x2, 21)
+            elif y1 < 0:
+                canvas.coords(cloud, x1, canvas_height - 20, x2, canvas_height)
+
+        window.after(100, move_cloud, canvas, cloud, dx, dy, right_frame)
+
+def update_canvas_ratios(event):
+    global canvas_width_ratio, canvas_height_ratio
+    canvas_width_ratio = canvas.winfo_width() / right_frame.winfo_width()
+    canvas_height_ratio = canvas.winfo_height() / left_frame.winfo_height()
+
+def collect_cpu_usage():
+    global window_closed
+    while not window_closed:
+        process_cpu = current_process.cpu_percent(interval=1) / psutil.cpu_count()
+        time_data.append(time.time())
+        cpu_data.append(process_cpu)
+        
+        memory_info = current_process.memory_info()
+        memory_usage = memory_info.rss
+        memory_usage_mb = memory_usage / (1024 * 1024)
+        memory_data.append(memory_usage_mb)
+        print(f"Memory Usage: {memory_usage_mb} MB")
+        
+        print(f"Process CPU Usage: {process_cpu}%")
+        time.sleep(1)
+
+def update_plot(i):
+    global window_closed
+    if window_closed:
+        return
+    ax.clear()
+    ax.plot(time_data, cpu_data, label='Utilisation CPU (%)', color='tab:blue')
+    ax.set_xlabel('Temps (s)')
+    ax.set_ylabel('CPU (%)', color='tab:blue')
+
+    if not hasattr(update_plot, 'ax2'):
+        update_plot.ax2 = ax.twinx()
+
+    ax2 = update_plot.ax2
+    ax2.clear()
+    ax2.plot(time_data, memory_data, label='Utilisation Mémoire (MB)', color='tab:red')
+
+    ax.spines['right'].set_visible(False)
+   
+    lines, labels = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(lines + lines2, labels + labels2, loc='upper left')
+
+def close_window():
+    global window_closed, ani
+    window_closed = True
+    if cpu_thread.is_alive():
+        cpu_thread.join()
+    if 'ani' in globals():
+        ani.event_source.stop()
+    window.destroy()
+
+def stop_operations():
+    global window_closed, ani
+    window_closed = True
+    if 'ani' in globals():
+        ani.event_source.stop()
+    print("Opérations arrêtées, mais la fenêtre reste ouverte.")
+
+# ===================================================
+# MAIN LOOP
+# ===================================================
+
+window = tk.Tk()
+window.title("Incubateur")
+window.geometry("800x600")
+window.configure(bg="black")
+
+sys.stdout = open('output.log', 'w')
+
+top_frame = tk.Frame(window, bg="gray", width=800, height=200, borderwidth=2, relief="solid", highlightbackground="white", highlightthickness=2)
+top_frame.pack(side="top", fill="both", expand=True)
+
+cloud_label = tk.Label(top_frame, text="Element quantity:")
+cloud_label.pack(side="left", padx=10, pady=5)
+cloud_quantity_entry = tk.Entry(top_frame)
+cloud_quantity_entry.pack(side="left", padx=10, pady=5)
+create_clouds_button = tk.Button(top_frame, text="Add element(s)", command=create_clouds)
+create_clouds_button.pack(side="left", padx=10, pady=5)
+
+stop_button = tk.Button(top_frame, text="Stop Operations", command=stop_operations)
+stop_button.place(relx=1.0, rely=0.0, anchor='ne')
+
+bottom_frame = tk.Frame(window,  width=800, height=400)
+bottom_frame.pack(side="bottom", fill="both", expand=True)
+
+left_frame = tk.Frame(bottom_frame, bg="black", width=400, height=400, borderwidth=2, relief="solid", highlightbackground="white", highlightthickness=2)
+left_frame.pack(side="left", fill="both", expand=True)
+
+right_frame = tk.Frame(bottom_frame, bg="black",  width=400, height=400, borderwidth=2, relief="solid", highlightbackground="white", highlightthickness=2)
+right_frame.pack(side="right", fill="both", expand=True)
+
+canvas = tk.Canvas(right_frame, bg="black", highlightthickness=0, bd=0)
+canvas.pack(fill="both", expand=True)
+
+fig_canvas= tkagg.FigureCanvasTkAgg(fig, master=left_frame)
+fig_canvas_widget = fig_canvas.get_tk_widget()
+fig_canvas_widget.pack(fill='both', expand=True)
+
+window.bind("<Configure>", update_canvas_ratios)
+update_canvas_ratios(None)
+
+window.after_idle(create_and_move_cloud)
+
+fig, ax = plt.subplots()
+ax2 = ax.twinx()
+ax2.set_ylabel('Mémoire (MB)', color='tab:red')
+
+cpu_thread = threading.Thread(target=collect_cpu_usage)
+cpu_thread.daemon = True
+cpu_thread.start()
+
+pid = os.getpid()
+print(f"PID de votre programme : {pid}")
+
+num_frames = len(time_data)
+frames = range(10)
+
+graph_widget = FigureCanvasTkAgg(fig, master=left_frame)
+graph_widget.get_tk_widget().pack(fill='both', expand=True, side='top', anchor='nw')
+MAX_FRAMES = 100
+ani = FuncAnimation(fig, update_plot, interval=100, save_count=MAX_FRAMES)
+
+window.protocol("WM_DELETE_WINDOW", close_window)
+
+sys.stdout.close()
+sys.stdout = sys.__stdout__
+
+window.mainloop()
