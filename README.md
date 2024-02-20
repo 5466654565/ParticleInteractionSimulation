@@ -6,6 +6,6 @@ Requirement :
     psutil
     pygame
 
-License: Open source
+Language: Python
 
-Author: Justin Carrier-Baudouin
+License: Open source
